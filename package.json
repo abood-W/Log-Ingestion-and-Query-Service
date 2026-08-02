@@ -1,0 +1,27 @@
+{
+  "name": "final-project",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abood-W/Log-Ingestion-and-Query-Service.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/abood-W/Log-Ingestion-and-Query-Service/issues"
+  },
+  "homepage": "https://github.com/abood-W/Log-Ingestion-and-Query-Service#readme",
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.4",
+    "typescript": "^7.0.2"
+  }
+}
