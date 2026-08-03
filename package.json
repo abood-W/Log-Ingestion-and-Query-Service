@@ -20,8 +20,13 @@
   },
   "homepage": "https://github.com/abood-W/Log-Ingestion-and-Query-Service#readme",
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.1.2",
     "tsx": "^4.23.4",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "postgres": "^3.4.9"
   }
 }
