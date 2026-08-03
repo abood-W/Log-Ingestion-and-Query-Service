@@ -1,5 +1,5 @@
 import express from "express";
-
+import logsRouter from "./routes/logs.js";
 process.loadEnvFile();
 
 const { client } = await import("./db/index.js");
@@ -13,6 +13,8 @@ app.use(express.json());
 app.get("/health", (_req, res) => {
   res.status(200).send("OK");
 });
+
+app.use(logsRouter);
 
 async function startServer() {
   try {
