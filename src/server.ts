@@ -2,8 +2,7 @@ import express from "express";
 
 process.loadEnvFile();
 
-const { sql } = await import("./db/index.js");
-
+const { client } = await import("./db/index.js");
 console.log("TypeScript project is working");
 
 const app = express();
@@ -17,11 +16,11 @@ app.get("/health", (_req, res) => {
 
 async function startServer() {
   try {
-    const result = await sql`
+    const result = await client`
       SELECT current_database() AS database_name
     `;
 
-    console.log(`Connected to database: ${result[0].database_name}`);
+    console.log(`Connected to database: ${result[0]?.database_name}`);
 
     app.listen(port, () => {
       console.log(`Server is running on port ${port}`);
