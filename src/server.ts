@@ -1,8 +1,7 @@
 import express from "express";
 import logsRouter from "./routes/logs.js";
-process.loadEnvFile();
+import { client } from "./db/index.js";
 
-const { client } = await import("./db/index.js");
 console.log("TypeScript project is working");
 
 const app = express();
@@ -33,4 +32,4 @@ async function startServer() {
   }
 }
 
-startServer();
+void startServer();

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."log_level" ADD VALUE 'debug';

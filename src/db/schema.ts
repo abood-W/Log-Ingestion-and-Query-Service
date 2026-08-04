@@ -8,7 +8,12 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 
-export const logLevelEnum = pgEnum("log_level", ["info", "warn", "error"]);
+export const logLevelEnum = pgEnum("log_level", [
+  "info",
+  "warn",
+  "error",
+  "debug",
+]);
 export const logs = pgTable(
   "logs",
   {
