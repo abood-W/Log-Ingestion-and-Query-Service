@@ -3,7 +3,7 @@ import { db } from "../db/index.js";
 import { logs } from "../db/schema.js";
 import { validateLogEntry } from "../validation/logs.js";
 import type { ValidLogInput, RejectedLog } from "../types/logs.js";
-
+import { desc } from "drizzle-orm";
 const router = Router();
 
 router.post("/logs", async (req, res) => {
@@ -51,6 +51,38 @@ router.post("/logs", async (req, res) => {
   return res.status(200).json({
     accepted: acceptedLogs.length,
     rejected,
+  });
+});
+
+router.get("/logs", async (req, res) => {
+  let limit = 100;
+  const limitParameter = req.query.limit;
+
+  if (limitParameter !== undefined) {
+    if (typeof limitParameter !== "string" || !/^\d+$/.test(limitParameter)) {
+      return res.status(400).json({
+        error: "limit must be an integer",
+      });
+    }
+
+    limit = Number(limitParameter);
+
+    if (limit < 1 || limit > 1000) {
+      return res.status(400).json({
+        error: "limit must be between 1 and 1000",
+      });
+    }
+  }
+
+  const result = await db
+    .select()
+    .from(logs)
+    .orderBy(desc(logs.timestamp), desc(logs.id))
+    .limit(limit);
+
+  return res.status(200).json({
+    logs: result,
+    next_cursor: null,
   });
 });
 
