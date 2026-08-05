@@ -1,6 +1,9 @@
 import { defineConfig } from "drizzle-kit";
+import { existsSync } from "node:fs";
 
-process.loadEnvFile();
+if (existsSync(".env")) {
+  process.loadEnvFile();
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 
