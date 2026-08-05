@@ -269,3 +269,39 @@ test("GET /logs rejects an invalid cursor", async () => {
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "invalid cursor");
 });
+
+test("GET /logs rejects an invalid level", async () => {
+  const response = await request(app).get("/logs").query({
+    level: "critical",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, "invalid level");
+});
+
+test("GET /logs rejects a non-numeric limit", async () => {
+  const response = await request(app).get("/logs").query({
+    limit: "abc",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, "limit must be an integer");
+});
+
+test("GET /logs rejects a limit below 1", async () => {
+  const response = await request(app).get("/logs").query({
+    limit: "0",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, "limit must be between 1 and 1000");
+});
+
+test("GET /logs rejects a limit above 1000", async () => {
+  const response = await request(app).get("/logs").query({
+    limit: "1001",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, "limit must be between 1 and 1000");
+});
