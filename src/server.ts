@@ -1,19 +1,9 @@
-import express from "express";
-import logsRouter from "./routes/logs.js";
+import { app } from "./app.js";
 import { client } from "./db/index.js";
 
 console.log("TypeScript project is working");
 
-const app = express();
 const port = Number(process.env.PORT) || 8080;
-
-app.use(express.json());
-
-app.get("/health", (_req, res) => {
-  res.status(200).send("OK");
-});
-
-app.use(logsRouter);
 
 async function startServer() {
   try {
