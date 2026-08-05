@@ -106,7 +106,8 @@ router.get("/logs", async (req, res) => {
   }
 
   const sinceParameter = req.query.since;
-
+  let since: Date | undefined;
+  let until: Date | undefined;
   if (sinceParameter !== undefined) {
     if (typeof sinceParameter !== "string") {
       return res.status(400).json({
@@ -114,7 +115,7 @@ router.get("/logs", async (req, res) => {
       });
     }
 
-    const since = new Date(sinceParameter);
+    since = new Date(sinceParameter);
 
     if (Number.isNaN(since.getTime())) {
       return res.status(400).json({
@@ -133,7 +134,7 @@ router.get("/logs", async (req, res) => {
       });
     }
 
-    const until = new Date(untilParameter);
+    until = new Date(untilParameter);
 
     if (Number.isNaN(until.getTime())) {
       return res.status(400).json({
@@ -141,6 +142,11 @@ router.get("/logs", async (req, res) => {
       });
     }
     conditions.push(lt(logs.timestamp, until));
+  }
+  if (since !== undefined && until !== undefined && until <= since) {
+    return res.status(400).json({
+      error: "until must be later than since",
+    });
   }
 
   for (const [key, value] of Object.entries(req.query)) {
