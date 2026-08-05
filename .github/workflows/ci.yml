@@ -76,38 +76,228 @@ jobs:
 
       - name: Test log ingestion
         run: |
-          timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-
           response=$(curl --fail --silent \
             -X POST http://localhost:8080/logs \
             -H "Content-Type: application/json" \
-            -d "{
-              \"logs\": [
+            -d '{
+              "logs": [
                 {
-                  \"timestamp\": \"$timestamp\",
-                  \"level\": \"info\",
-                  \"service\": \"ci-test\",
-                  \"message\": \"CI ingestion test\",
-                  \"attributes\": {
-                    \"environment\": \"github-actions\"
+                  "timestamp": "2026-08-05T12:00:05.000Z",
+                  "level": "error",
+                  "service": "checkout",
+                  "message": "Payment Declined during checkout",
+                  "attributes": {
+                    "user_id": 42,
+                    "environment": "github-actions"
+                  }
+                },
+                {
+                  "timestamp": "2026-08-05T12:00:04.000Z",
+                  "level": "info",
+                  "service": "auth",
+                  "message": "User login successful",
+                  "attributes": {
+                    "user_id": 42,
+                    "environment": "github-actions"
+                  }
+                },
+                {
+                  "timestamp": "2026-08-05T12:00:03.000Z",
+                  "level": "warn",
+                  "service": "checkout",
+                  "message": "Inventory is low",
+                  "attributes": {
+                    "user_id": 7,
+                    "environment": "github-actions"
+                  }
+                },
+                {
+                  "timestamp": "2026-08-05T12:00:02.000Z",
+                  "level": "error",
+                  "service": "payment",
+                  "message": "Card DECLINED by bank",
+                  "attributes": {
+                    "user_id": 99,
+                    "environment": "github-actions"
+                  }
+                },
+                {
+                  "timestamp": "2026-08-05T12:00:01.000Z",
+                  "level": "debug",
+                  "service": "auth",
+                  "message": "Token refresh started",
+                  "attributes": {
+                    "user_id": 42,
+                    "environment": "github-actions"
                   }
                 }
               ]
-            }")
+            }')
 
           echo "$response"
-          echo "$response" | grep '"accepted":1'
-          echo "$response" | grep '"rejected":\[\]'
 
-      - name: Test log querying
+          echo "$response" | jq -e '.accepted == 5'
+          echo "$response" | jq -e '.rejected | length == 0'
+
+      - name: Test service filter
         run: |
           response=$(curl --fail --silent \
-            "http://localhost:8080/logs?limit=1")
+            "http://localhost:8080/logs?service=checkout")
 
           echo "$response"
-          echo "$response" | grep '"service":"ci-test"'
-          echo "$response" | grep '"next_cursor":null'
 
+          echo "$response" | jq -e '.logs | length == 2'
+          echo "$response" | jq -e \
+            'all(.logs[]; .service == "checkout")'
+
+      - name: Test level filter
+        run: |
+          response=$(curl --fail --silent \
+            "http://localhost:8080/logs?level=error")
+
+          echo "$response"
+
+          echo "$response" | jq -e '.logs | length == 2'
+          echo "$response" | jq -e \
+            'all(.logs[]; .level == "error")'
+
+      - name: Test since filter
+        run: |
+          response=$(curl --fail --silent \
+            "http://localhost:8080/logs?since=2026-08-05T12:00:03.000Z")
+
+          echo "$response"
+
+          # since is inclusive, so 12:00:03 must be included.
+          echo "$response" | jq -e '.logs | length == 3'
+          echo "$response" | jq -e \
+            'all(.logs[]; .timestamp >= "2026-08-05T12:00:03.000Z")'
+
+      - name: Test until filter
+        run: |
+          response=$(curl --fail --silent \
+            "http://localhost:8080/logs?until=2026-08-05T12:00:03.000Z")
+
+          echo "$response"
+
+          # until is exclusive, so 12:00:03 must not be included.
+          echo "$response" | jq -e '.logs | length == 2'
+          echo "$response" | jq -e \
+            'all(.logs[]; .timestamp < "2026-08-05T12:00:03.000Z")'
+
+      - name: Test attribute filter
+        run: |
+          response=$(curl --fail --silent \
+            "http://localhost:8080/logs?attr.user_id=42")
+
+          echo "$response"
+
+          echo "$response" | jq -e '.logs | length == 3'
+          echo "$response" | jq -e \
+            'all(.logs[]; (.attributes.user_id | tostring) == "42")'
+
+      - name: Test message search
+        run: |
+          response=$(curl --fail --silent \
+            "http://localhost:8080/logs?q=declined")
+
+          echo "$response"
+
+          # This also checks that q is case-insensitive.
+          echo "$response" | jq -e '.logs | length == 2'
+          echo "$response" | jq -e \
+            'all(.logs[]; (.message | ascii_downcase | contains("declined")))'
+
+      - name: Test limit
+        run: |
+          response=$(curl --fail --silent \
+            "http://localhost:8080/logs?limit=2")
+
+          echo "$response"
+
+          echo "$response" | jq -e '.logs | length == 2'
+          echo "$response" | jq -e \
+            '.next_cursor != null and (.next_cursor | length > 0)'
+
+      - name: Test cursor pagination
+        run: |
+          first_response=$(curl --fail --silent \
+            "http://localhost:8080/logs?limit=2")
+
+          echo "First page:"
+          echo "$first_response"
+
+          cursor=$(echo "$first_response" | jq -r '.next_cursor')
+
+          test "$cursor" != "null"
+          test -n "$cursor"
+
+          first_id_1=$(echo "$first_response" | jq -r '.logs[0].id')
+          first_id_2=$(echo "$first_response" | jq -r '.logs[1].id')
+
+          second_response=$(curl --fail --silent \
+            --get \
+            --data-urlencode "limit=2" \
+            --data-urlencode "cursor=$cursor" \
+            "http://localhost:8080/logs")
+
+          echo "Second page:"
+          echo "$second_response"
+
+          echo "$second_response" | jq -e '.logs | length == 2'
+
+          echo "$first_response" | jq -e \
+            '.logs[0].timestamp == "2026-08-05T12:00:05.000Z"'
+
+          echo "$first_response" | jq -e \
+            '.logs[1].timestamp == "2026-08-05T12:00:04.000Z"'
+
+          echo "$second_response" | jq -e \
+            '.logs[0].timestamp == "2026-08-05T12:00:03.000Z"'
+
+          echo "$second_response" | jq -e \
+            '.logs[1].timestamp == "2026-08-05T12:00:02.000Z"'
+
+          second_id_1=$(echo "$second_response" | jq -r '.logs[0].id')
+          second_id_2=$(echo "$second_response" | jq -r '.logs[1].id')
+
+          test "$second_id_1" != "$first_id_1"
+          test "$second_id_1" != "$first_id_2"
+          test "$second_id_2" != "$first_id_1"
+          test "$second_id_2" != "$first_id_2"
+
+      - name: Test combined filters
+        run: |
+          response=$(curl --fail --silent \
+            --get \
+            --data-urlencode "service=checkout" \
+            --data-urlencode "level=error" \
+            --data-urlencode "q=declined" \
+            --data-urlencode "attr.user_id=42" \
+            --data-urlencode "limit=10" \
+            "http://localhost:8080/logs")
+
+          echo "$response"
+
+          echo "$response" | jq -e '.logs | length == 1'
+          echo "$response" | jq -e '.logs[0].service == "checkout"'
+          echo "$response" | jq -e '.logs[0].level == "error"'
+          echo "$response" | jq -e \
+            '(.logs[0].message | ascii_downcase | contains("declined"))'
+          echo "$response" | jq -e \
+            '(.logs[0].attributes.user_id | tostring) == "42"'
+
+      - name: Test invalid cursor
+        run: |
+          status=$(curl --silent \
+            --output response.json \
+            --write-out "%{http_code}" \
+            "http://localhost:8080/logs?cursor=not-a-valid-cursor")
+
+          cat response.json
+
+          test "$status" = "400"
+          jq -e '.error == "invalid cursor"' response.json
       - name: Show server logs on failure
         if: failure()
         run: cat server.log || true
