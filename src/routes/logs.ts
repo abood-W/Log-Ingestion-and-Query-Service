@@ -3,8 +3,10 @@ import { db } from "../db/index.js";
 import { logs } from "../db/schema.js";
 import { validateLogEntry } from "../validation/logs.js";
 import type { ValidLogInput, RejectedLog } from "../types/logs.js";
-import { desc, eq, and, gte, lt, sql, ilike, or, SQL } from "drizzle-orm";
+import { desc, eq, and, gte, lt, or, SQL } from "drizzle-orm";
 import { buildSharedLogFilters } from "../query/log-filters.js";
+import { parseTimeRange } from "../query/time-range.js";
+
 const router = Router();
 
 router.post("/logs", async (req, res) => {
@@ -83,48 +85,21 @@ router.get("/logs", async (req, res) => {
 
   const conditions: SQL[] = [...sharedFiltersResult.conditions];
 
-  const sinceParameter = req.query.since;
-  let since: Date | undefined;
-  let until: Date | undefined;
-  if (sinceParameter !== undefined) {
-    if (typeof sinceParameter !== "string") {
-      return res.status(400).json({
-        error: "since must be a valid ISO 8601 timestamp",
-      });
-    }
-
-    since = new Date(sinceParameter);
-
-    if (Number.isNaN(since.getTime())) {
-      return res.status(400).json({
-        error: "since must be a valid ISO 8601 timestamp",
-      });
-    }
-
+  const timeRangeResult = parseTimeRange(req.query, {
+    sinceRequired: false,
+    untilRequired: false,
+  });
+  if (!timeRangeResult.valid) {
+    return res.status(400).json({
+      error: timeRangeResult.reason,
+    });
+  }
+  const { since, until } = timeRangeResult;
+  if (since !== undefined) {
     conditions.push(gte(logs.timestamp, since));
   }
-
-  const untilParameter = req.query.until;
-  if (untilParameter !== undefined) {
-    if (typeof untilParameter !== "string") {
-      return res.status(400).json({
-        error: "until must be a valid ISO 8601 timestamp",
-      });
-    }
-
-    until = new Date(untilParameter);
-
-    if (Number.isNaN(until.getTime())) {
-      return res.status(400).json({
-        error: "until must be a valid ISO 8601 timestamp",
-      });
-    }
+  if (until !== undefined) {
     conditions.push(lt(logs.timestamp, until));
-  }
-  if (since !== undefined && until !== undefined && until <= since) {
-    return res.status(400).json({
-      error: "until must be later than since",
-    });
   }
 
   const cursorParameter = req.query.cursor;

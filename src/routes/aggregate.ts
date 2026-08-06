@@ -3,46 +3,30 @@ import { and, gte, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { logs } from "../db/schema.js";
 import { buildSharedLogFilters } from "../query/log-filters.js";
+import { parseTimeRange } from "../query/time-range.js";
 
 const router = Router();
 
 router.get("/logs/aggregate", async (req, res) => {
-  const sinceParameter = req.query.since;
-  const untilParameter = req.query.until;
   const bucketParameter = req.query.bucket;
   const groupByParameter = req.query.group_by;
 
-  if (typeof sinceParameter !== "string") {
+  const timeRangeResult = parseTimeRange(req.query, {
+    sinceRequired: true,
+    untilRequired: true,
+  });
+
+  if (!timeRangeResult.valid) {
     return res.status(400).json({
-      error: "since is required and must be a valid ISO 8601 timestamp",
+      error: timeRangeResult.reason,
     });
   }
 
-  const since = new Date(sinceParameter);
+  const { since, until } = timeRangeResult;
 
-  if (Number.isNaN(since.getTime())) {
+  if (since === undefined || until === undefined) {
     return res.status(400).json({
-      error: "since must be a valid ISO 8601 timestamp",
-    });
-  }
-
-  if (typeof untilParameter !== "string") {
-    return res.status(400).json({
-      error: "until is required and must be a valid ISO 8601 timestamp",
-    });
-  }
-
-  const until = new Date(untilParameter);
-
-  if (Number.isNaN(until.getTime())) {
-    return res.status(400).json({
-      error: "until must be a valid ISO 8601 timestamp",
-    });
-  }
-
-  if (until <= since) {
-    return res.status(400).json({
-      error: "until must be later than since",
+      error: "since and until are required",
     });
   }
 
