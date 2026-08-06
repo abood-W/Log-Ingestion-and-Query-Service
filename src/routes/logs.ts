@@ -3,8 +3,8 @@ import { db } from "../db/index.js";
 import { logs } from "../db/schema.js";
 import { validateLogEntry } from "../validation/logs.js";
 import type { ValidLogInput, RejectedLog } from "../types/logs.js";
-import { desc, eq, and, gte, lt, sql, ilike, or } from "drizzle-orm";
-
+import { desc, eq, and, gte, lt, sql, ilike, or, SQL } from "drizzle-orm";
+import { buildSharedLogFilters } from "../query/log-filters.js";
 const router = Router();
 
 router.post("/logs", async (req, res) => {
@@ -74,36 +74,14 @@ router.get("/logs", async (req, res) => {
     }
   }
 
-  const conditions = [];
-
-  const serviceParameter = req.query.service;
-
-  if (serviceParameter !== undefined) {
-    if (typeof serviceParameter !== "string") {
-      return res.status(400).json({
-        error: "service must be a string",
-      });
-    }
-
-    conditions.push(eq(logs.service, serviceParameter));
+  const sharedFiltersResult = buildSharedLogFilters(req.query);
+  if (!sharedFiltersResult.valid) {
+    return res.status(400).json({
+      error: sharedFiltersResult.reason,
+    });
   }
 
-  const levelParameter = req.query.level;
-
-  if (levelParameter !== undefined) {
-    if (
-      typeof levelParameter !== "string" ||
-      !["debug", "info", "warn", "error"].includes(levelParameter)
-    ) {
-      return res.status(400).json({
-        error: "invalid level",
-      });
-    }
-
-    conditions.push(
-      eq(logs.level, levelParameter as "debug" | "info" | "warn" | "error"),
-    );
-  }
+  const conditions: SQL[] = [...sharedFiltersResult.conditions];
 
   const sinceParameter = req.query.since;
   let since: Date | undefined;
@@ -149,31 +127,6 @@ router.get("/logs", async (req, res) => {
     });
   }
 
-  for (const [key, value] of Object.entries(req.query)) {
-    if (!key.startsWith("attr.")) {
-      continue;
-    }
-
-    if (typeof value !== "string") {
-      return res.status(400).json({
-        error: `query parameter ${key} must be a string`,
-      });
-    }
-    const attributeKey = key.substring(5);
-
-    conditions.push(sql`${logs.attributes} ->> ${attributeKey} = ${value}`);
-  }
-
-  const queryParameter = req.query.q;
-
-  if (queryParameter !== undefined) {
-    if (typeof queryParameter !== "string") {
-      return res.status(400).json({
-        error: "q must be a string",
-      });
-    }
-    conditions.push(ilike(logs.message, `%${queryParameter}%`));
-  }
   const cursorParameter = req.query.cursor;
 
   if (cursorParameter !== undefined) {
@@ -251,4 +204,5 @@ router.get("/logs", async (req, res) => {
     next_cursor: nextCursor,
   });
 });
+
 export default router;
