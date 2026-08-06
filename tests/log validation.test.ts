@@ -58,7 +58,7 @@ test("rejects an invalid timestamp", () => {
   }
 });
 
-test("rejects a timestamp more than five minutes in the future", () => {
+test("rejects a timestamp more than 5 minutes in the future", () => {
   const futureTimestamp = new Date(Date.now() + 6 * 60 * 1000).toISOString();
 
   const result = validateLogEntry({
@@ -73,7 +73,7 @@ test("rejects a timestamp more than five minutes in the future", () => {
   if (!result.valid) {
     assert.equal(
       result.reason,
-      "timestamp must not be more than five minutes in the future",
+      "timestamp cannot be more than 5 minutes in the future",
     );
   }
 });
@@ -121,4 +121,30 @@ test("rejects an empty message", () => {
   if (!result.valid) {
     assert.equal(result.reason, "message must be a non-empty string");
   }
+});
+
+test("accepts a timestamp within five minutes in the future", () => {
+  const timestamp = new Date(Date.now() + 4 * 60 * 1000).toISOString();
+
+  const result = validateLogEntry({
+    timestamp,
+    level: "info",
+    service: "auth",
+    message: "future log",
+  });
+
+  assert.equal(result.valid, true);
+});
+
+test("rejects a timestamp more than five minutes in the future", () => {
+  const timestamp = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+  const result = validateLogEntry({
+    timestamp,
+    level: "info",
+    service: "auth",
+    message: "future log",
+  });
+
+  assert.equal(result.valid, false);
 });
