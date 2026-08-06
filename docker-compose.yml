@@ -37,7 +37,8 @@ services:
       NODE_ENV: production
       PORT: 8080
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-logs_db}
-
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+      RETENTION_CHECK_INTERVAL_MINUTES: ${RETENTION_CHECK_INTERVAL_MINUTES:-60}
     ports:
       - "8080:8080"
 
