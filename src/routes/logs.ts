@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { db } from "../db/index.js";
+import { db, client } from "../db/index.js";
 import { logs } from "../db/schema.js";
 import { validateLogEntry } from "../validation/logs.js";
 import type { ValidLogInput, RejectedLog } from "../types/logs.js";
 import { desc, eq, and, gte, lt, or, SQL } from "drizzle-orm";
 import { buildSharedLogFilters } from "../query/log-filters.js";
 import { parseTimeRange } from "../query/time-range.js";
-
+import { bulkInsertLogs } from "../db/bulk-insert.js";
 const router = Router();
 
 router.post("/logs", async (req, res) => {
@@ -25,7 +25,7 @@ router.post("/logs", async (req, res) => {
       error: "logs must be an array",
     });
   }
-
+  const validationStart = performance.now();
   const acceptedLogs: ValidLogInput[] = [];
   const rejected: RejectedLog[] = [];
   /*
@@ -61,9 +61,17 @@ router.post("/logs", async (req, res) => {
       rejected,
     });
   }
+  const validationEnd = performance.now();
 
-  await db.insert(logs).values(acceptedLogs);
+  console.log(`Validation: ${(validationEnd - validationStart).toFixed(2)} ms`);
 
+  const insertStart = performance.now();
+
+  await bulkInsertLogs(acceptedLogs);
+
+  const insertEnd = performance.now();
+
+  console.log(`Insert: ${(insertEnd - insertStart).toFixed(2)} ms`);
   return res.status(200).json({
     accepted: acceptedLogs.length,
     rejected,

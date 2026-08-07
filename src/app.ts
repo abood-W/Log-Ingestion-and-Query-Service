@@ -4,7 +4,7 @@ import aggregateRouter from "./routes/aggregate.js";
 export const app = express();
 app.use(
   express.json({
-    limit: "5mb",
+    limit: "10mb",
   }),
 );
 //app.use(express.json());
