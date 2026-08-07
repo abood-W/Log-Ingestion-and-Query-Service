@@ -100,7 +100,6 @@ export function validateLogEntry(entry: unknown): ValidationResult {
     },
   };
 }
-
 function validateAttributes(attributes: unknown):
   | {
       valid: true;

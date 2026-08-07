@@ -25,6 +25,9 @@ services:
       timeout: 5s
       retries: 10
 
+    cpus: 1.0
+    mem_limit: 1g
+
   app:
     build:
       context: .
@@ -39,12 +42,16 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-logs_db}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
       RETENTION_CHECK_INTERVAL_MINUTES: ${RETENTION_CHECK_INTERVAL_MINUTES:-60}
+
     ports:
       - "8080:8080"
 
     depends_on:
       postgres:
         condition: service_healthy
+
+    cpus: 0.5
+    mem_limit: 256m
 
     command: >
       sh -c "npm run db:migrate &&

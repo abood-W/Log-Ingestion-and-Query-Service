@@ -28,7 +28,7 @@ router.post("/logs", async (req, res) => {
 
   const acceptedLogs: ValidLogInput[] = [];
   const rejected: RejectedLog[] = [];
-
+  /*
   requestBody.logs.forEach((entry, index) => {
     const result = validateLogEntry(entry);
 
@@ -41,7 +41,20 @@ router.post("/logs", async (req, res) => {
       });
     }
   });
+*/
+  for (let index = 0; index < requestBody.logs.length; index++) {
+    const entry = requestBody.logs[index];
+    const result = validateLogEntry(entry);
 
+    if (result.valid) {
+      acceptedLogs.push(result.value);
+    } else {
+      rejected.push({
+        index,
+        reason: result.reason,
+      });
+    }
+  }
   if (acceptedLogs.length === 0) {
     return res.status(400).json({
       accepted: 0,
