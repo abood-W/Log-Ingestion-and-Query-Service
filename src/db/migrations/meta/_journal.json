@@ -15,6 +15,13 @@
       "when": 1785853755502,
       "tag": "0001_charming_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786102675660,
+      "tag": "0002_great_ghost_rider",
+      "breakpoints": true
     }
   ]
 }
