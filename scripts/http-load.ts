@@ -1,3 +1,5 @@
+export {};
+
 // Load test configuration (can be overridden with environment variables)
 const TOTAL_LOGS = Number(process.env.LOAD_ROWS ?? 100_000);
 const BATCH_SIZE = Number(process.env.LOAD_BATCH_SIZE ?? 1000);
