@@ -1,64 +1,258 @@
 # Log Ingestion and Query Service
 
-A TypeScript-based Express service for ingesting structured logs, validating them, and storing them in PostgreSQL using Drizzle ORM.
+A high-throughput log ingestion and query service built with TypeScript, Express, PostgreSQL, Drizzle ORM, and postgres.js.
 
-## What it does
+The service accepts structured logs in batches, validates them, stores them in PostgreSQL, supports filtering and cursor-based pagination, provides time-bucketed aggregation, and automatically removes expired logs based on a configurable retention period.
 
-- Accepts bulk log events through a `/logs` POST endpoint.
-- Validates each log entry for required fields, timestamp format, allowed log levels, and flat attribute values.
-- Persists accepted log entries into a PostgreSQL database using Drizzle ORM.
-- Provides a simple `/health` endpoint for readiness checks.
+The project is designed to handle approximately 1,000,000 stored log records while maintaining high ingestion throughput and responsive queries under constrained CPU and memory resources.
 
-## Key components
+---
 
-- `src/index.ts` — loads environment variables and starts the server.
-- `src/server.ts` — configures Express, health checks, and database connectivity.
-- `src/routes/logs.ts` — handles `/logs` ingestion logic and response structure.
-- `src/db/schema.ts` — defines the `logs` table with typed columns and indexes.
-- `src/validation/logs.ts` — validates incoming log payloads.
+## Features
 
-## Supported log schema
+- Bulk log ingestion through `POST /logs`
+- Per-entry validation with partial batch acceptance
+- PostgreSQL persistent storage
+- Filtering by:
+  - service
+  - log level
+  - time range
+  - message text
+  - attributes
+- Cursor-based pagination
+- Time-bucketed aggregation
+- Aggregation grouping by service or log level
+- Configurable log retention
+- Automatic retention cleanup
+- Database indexes for common query patterns
+- Docker and Docker Compose support
+- Automatic database migrations
+- Automated tests
+- GitHub Actions CI
+- Load-testing scripts
+- Performance measurements under constrained CPU and memory
 
-Each log object must include:
+---
 
-- `timestamp` — ISO 8601 string, not more than 5 minutes in the future
-- `level` — one of `info`, `warn`, `error`, `debug`
-- `service` — non-empty string identifying the source service
-- `message` — non-empty string
-- `attributes` — optional flat object with string, number, or boolean values
+## Technology Stack
 
-## Database model
+- Node.js 22
+- TypeScript
+- Express
+- PostgreSQL 17
+- Drizzle ORM
+- postgres.js
+- Docker
+- Docker Compose
+- GitHub Actions
+- Node.js test runner
+- tsx
 
-The `logs` table stores:
+---
 
-- `id` — auto-incrementing primary key
-- `timestamp` — timestamp with timezone
-- `level` — enum log level
-- `service` — service name
-- `message` — log message
-- `attributes` — JSONB metadata
+## Project Structure
 
-## Run locally
+```text
+src/
+├── db/
+│   ├── migrations/
+│   ├── bulk-insert.ts
+│   ├── index.ts
+│   └── schema.ts
+├── query/
+│   ├── log-filters.ts
+│   └── time-range.ts
+├── retention/
+│   ├── cleanup.ts
+│   └── scheduler.ts
+├── routes/
+│   ├── aggregate.ts
+│   └── logs.ts
+├── types/
+│   └── logs.ts
+├── validation/
+│   └── logs.ts
+├── app.ts
+├── index.ts
+└── server.ts
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Run migrations:
-   ```bash
-   npm run db:migrate
-   ```
-3. Start the app in development mode:
-   ```bash
-   npm run dev
-   ```
+scripts/
+├── aggregate-load.ts
+├── http-load.ts
+└── load-data.ts
 
-## API endpoints
+tests/
+├── aggregate.test.ts
+├── health.test.ts
+├── log validation.test.ts
+├── log.test.ts
+└── retention.test.ts
 
-- `GET /health` — returns `OK`
-- `POST /logs` — submit an object with a `logs` array
+.github/
+├── workflows/
+│   └── ci.yml
 
-Example request body:
+.dockerignore
+.gitignore
+docker-compose.yml
+Dockerfile
+drizzle.config.ts
+```
+
+### Main directories
+
+- `src/db/` — database connection, schema, migrations, and optimized bulk insertion.
+- `src/query/` — reusable log filtering and time-range query logic.
+- `src/retention/` — retention cleanup and scheduled deletion of expired logs.
+- `src/routes/` — ingestion, querying, and aggregation API routes.
+- `src/types/` — shared TypeScript types.
+- `src/validation/` — validation of incoming log entries.
+- `scripts/` — dataset generation and performance/load-testing scripts.
+- `tests/` — automated API, validation, aggregation, and retention tests.
+- `.github/workflows/` — CI workflow configuration.
+
+````
+# Log Schema
+
+Each log entry contains:
+
+| Field        | Type            | Required | Description                         |
+| ------------ | --------------- | -------- | ----------------------------------- |
+| `timestamp`  | ISO 8601 string | Yes      | Event timestamp                     |
+| `level`      | string          | Yes      | `debug`, `info`, `warn`, or `error` |
+| `service`    | string          | Yes      | Service that generated the log      |
+| `message`    | string          | Yes      | Log message                         |
+| `attributes` | object          | No       | Flat key/value metadata             |
+
+Attribute values may contain:
+
+- strings
+- numbers
+- booleans
+
+Example:
+
+```json
+{
+  "timestamp": "2026-08-04T12:00:00Z",
+  "level": "info",
+  "service": "auth-service",
+  "message": "User logged in",
+  "attributes": {
+    "userId": 123,
+    "method": "oauth",
+    "success": true
+  }
+}
+````
+
+Timestamps more than five minutes in the future are rejected.
+
+---
+
+# Database Design
+
+The main PostgreSQL table is `logs`.
+
+```text
+logs
+--------------------------------
+id          bigint primary key
+timestamp   timestamptz
+level       log_level enum
+service     text
+message     text
+attributes  jsonb
+```
+
+## Attribute Storage
+
+Dynamic attributes are stored using PostgreSQL `JSONB`.
+
+This allows different services to attach different metadata without requiring schema changes for every possible attribute.
+
+For example:
+
+```json
+{
+  "user_id": 42,
+  "region": "eu",
+  "cached": true
+}
+```
+
+The API can filter these attributes using query parameters such as:
+
+```text
+GET /logs?attr.region=eu
+```
+
+Only flat string, number, and boolean attribute values are accepted.
+
+---
+
+# Index Design
+
+Indexes are defined for frequently queried fields:
+
+```text
+timestamp
+service
+level
+```
+
+These indexes improve filtering and time-range queries while keeping write overhead relatively low.
+
+The index strategy was tested using PostgreSQL:
+
+```sql
+EXPLAIN ANALYZE
+```
+
+Performance testing showed that PostgreSQL may choose different query plans depending on dataset size and query selectivity.
+
+For example, small datasets may use sequential scans because scanning the table can be cheaper than using an index.
+
+At larger dataset sizes PostgreSQL uses indexes when they provide a lower-cost execution plan.
+
+Index design was kept intentionally limited because every additional index increases ingestion cost.
+
+---
+
+# API
+
+The service runs on:
+
+```text
+http://localhost:8080
+```
+
+## GET /health
+
+Health/readiness endpoint.
+
+```http
+GET /health
+```
+
+Response:
+
+```text
+OK
+```
+
+---
+
+# POST /logs
+
+Ingests a batch of logs.
+
+Example:
+
+```http
+POST /logs
+Content-Type: application/json
+```
 
 ```json
 {
@@ -69,16 +263,647 @@ Example request body:
       "service": "auth-service",
       "message": "User logged in",
       "attributes": {
-        "userId": 123,
-        "method": "oauth"
+        "userId": 123
       }
     }
   ]
 }
 ```
 
-## Notes
+Successful response:
 
-- The app uses `tsx` for development execution.
-- Database connectivity is checked before the server starts.
-- Invalid log entries are rejected with contextual errors and accepted entries are inserted in bulk.
+```json
+{
+  "accepted": 1,
+  "rejected": []
+}
+```
+
+Validation is performed independently for every entry.
+
+Therefore, a batch may contain both accepted and rejected entries.
+
+If every entry is invalid, the request returns HTTP `400`.
+
+---
+
+# GET /logs
+
+Queries stored logs.
+
+Supported query parameters include:
+
+| Parameter    | Description               |
+| ------------ | ------------------------- |
+| `service`    | Filter by service         |
+| `level`      | Filter by log level       |
+| `since`      | Inclusive start timestamp |
+| `until`      | Exclusive end timestamp   |
+| `q`          | Search log messages       |
+| `attr.<key>` | Filter by attribute       |
+| `limit`      | Number of results         |
+| `cursor`     | Pagination cursor         |
+
+The filters can be combined.
+
+Example:
+
+```text
+GET /logs?service=checkout&level=error&limit=100
+```
+
+Attribute filtering:
+
+```text
+GET /logs?attr.region=eu
+```
+
+Time filtering:
+
+```text
+GET /logs?since=2026-08-01T00:00:00Z&until=2026-08-02T00:00:00Z
+```
+
+---
+
+## Cursor Pagination
+
+`GET /logs` uses cursor-based pagination rather than offset pagination.
+
+Results are ordered by:
+
+```text
+timestamp DESC
+id DESC
+```
+
+The cursor contains the timestamp and ID of the last returned log.
+
+Example response:
+
+```json
+{
+  "logs": [],
+  "next_cursor": null
+}
+```
+
+When additional results exist, `next_cursor` can be supplied to the next request.
+
+Cursor pagination was selected because it scales better than large SQL offsets as the log table grows.
+
+---
+
+# GET /logs/aggregate
+
+Returns time-bucketed log counts.
+
+Aggregation supports grouping by:
+
+- service
+- level
+
+and supports the same relevant filtering behavior as log querying.
+
+Example:
+
+```text
+GET /logs/aggregate?since=2026-08-01T00:00:00Z&until=2026-08-02T00:00:00Z&bucket=5m&group_by=service
+```
+
+The aggregation endpoint is designed for use cases such as monitoring log volume over time and comparing activity between services or log levels.
+
+---
+
+# Retention
+
+The service supports automatic deletion of logs older than the configured retention period.
+
+Retention cleanup runs automatically and removes expired records from PostgreSQL.
+
+This prevents the log table from growing indefinitely.
+
+The retention implementation is tested automatically.
+
+---
+
+# Bulk Ingestion Optimization
+
+The initial ingestion implementation used Drizzle ORM:
+
+```ts
+await db.insert(logs).values(acceptedLogs);
+```
+
+During load testing, application-side processing became a significant bottleneck under the application's `0.5 CPU` limit.
+
+The ingestion hot path was therefore optimized using the lower-level postgres.js client.
+
+Before insertion, values are converted into database-friendly representations:
+
+```ts
+const rows = logs.map((log) => ({
+  timestamp: log.timestamp.toISOString(),
+  level: log.level,
+  service: log.service,
+  message: log.message,
+  attributes: JSON.stringify(log.attributes),
+}));
+```
+
+The entire batch is then inserted in one operation:
+
+```ts
+await client`
+  INSERT INTO logs
+  ${client(rows, "timestamp", "level", "service", "message", "attributes")}
+`;
+```
+
+Drizzle remains useful for schema management and normal database queries, while the lower-level client is used for the performance-critical ingestion path.
+
+This optimization produced a significant improvement in measured ingestion throughput.
+
+---
+
+# Docker
+
+The entire service can be started using Docker Compose.
+
+```bash
+docker compose up --build
+```
+
+Or in detached mode:
+
+```bash
+docker compose up --build -d
+```
+
+Docker Compose starts:
+
+```text
+logs-app
+logs-postgres
+```
+
+The application is available at:
+
+```text
+localhost:8080
+```
+
+PostgreSQL is exposed at:
+
+```text
+localhost:5432
+```
+
+The PostgreSQL container includes a health check, and the application waits for the database before starting.
+
+Database migrations are automatically applied during container startup.
+
+Persistent PostgreSQL data is stored using a Docker volume.
+
+---
+
+# Local Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run database migrations:
+
+```bash
+npm run db:migrate
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+Run tests:
+
+```bash
+npm test
+```
+
+---
+
+# Testing
+
+The project contains automated tests for:
+
+- health endpoint
+- log validation
+- valid ingestion
+- partial batch rejection
+- completely invalid batches
+- malformed request bodies
+- service filtering
+- level filtering
+- message filtering
+- attribute filtering
+- time-range filtering
+- invalid time ranges
+- cursor pagination
+- invalid cursors
+- invalid limits
+- aggregation
+- aggregation grouping
+- aggregation filtering
+- invalid aggregation parameters
+- retention cleanup
+
+Current test suite:
+
+```text
+33 tests
+33 passed
+0 failed
+```
+
+Run:
+
+```bash
+npm test
+```
+
+---
+
+# CI
+
+GitHub Actions is used to automatically validate the project.
+
+The CI pipeline:
+
+1. starts PostgreSQL
+2. installs Node.js dependencies
+3. builds the TypeScript project
+4. runs automated tests
+5. validates the application against PostgreSQL
+
+This ensures changes are checked before being merged.
+
+---
+
+# Performance Testing
+
+Performance testing was performed using custom load-generation scripts.
+
+The goal was to measure actual system behavior rather than estimate performance theoretically.
+
+## Test Environment
+
+The Docker containers were restricted to approximately:
+
+| Component   |     CPU | Memory |
+| ----------- | ------: | -----: |
+| Application | 0.5 CPU | 256 MB |
+| PostgreSQL  |   1 CPU |   1 GB |
+
+The tests were executed locally using Docker.
+
+---
+
+## Dataset Size
+
+Tests were performed with datasets ranging from:
+
+```text
+10,000 logs
+100,000 logs
+500,000 logs
+1,000,000 logs
+```
+
+The primary large-scale benchmark used approximately:
+
+```text
+1,000,000 logs
+```
+
+---
+
+# Ingestion Benchmarks
+
+Several combinations of batch size and concurrency were tested.
+
+## Batch Size 1000
+
+A sustained 500,000-log test produced:
+
+```text
+Batch size: 1000
+Concurrency: 4
+Accepted: 500,000
+Failed requests: 0
+Throughput: 15,112 logs/second
+Average request latency: 261.16 ms
+p95 request latency: 452.44 ms
+```
+
+Increasing concurrency to 8 did not improve sustained performance:
+
+```text
+Batch size: 1000
+Concurrency: 8
+Accepted: 500,000
+Failed requests: 0
+Throughput: 13,693 logs/second
+Average request latency: 561.36 ms
+p95 request latency: 1089.33 ms
+```
+
+This demonstrated that excessive concurrency can increase queueing and latency rather than improving throughput.
+
+---
+
+## 1,000,000 Log Benchmark
+
+Increasing the batch size to `1500` improved sustained ingestion performance.
+
+Multiple concurrency levels were tested with a dataset of 1,000,000 logs:
+
+| Batch Size | Concurrency |        Throughput | Average Latency |   p95 Latency | Failed |
+| ---------: | ----------: | ----------------: | --------------: | ------------: | -----: |
+|       1500 |           2 |     11,686 logs/s |       254.21 ms |     543.09 ms |      0 |
+|       1500 |           4 | **18,513 logs/s** |   **320.02 ms** | **564.05 ms** |      0 |
+|       1500 |           6 |     18,505 logs/s |       480.11 ms |    1315.48 ms |      0 |
+|       1500 |           8 |     18,082 logs/s |       640.17 ms |    1574.53 ms |      0 |
+
+The preferred configuration was:
+
+````text
+Dataset: 1,000,000 logs
+Batch size: 1500
+Concurrency: 4
+Accepted logs: 1,000,000
+Failed requests: 0
+Total time: 54.02 seconds
+Throughput: 18,513 logs/second
+Average request latency: 320.02 ms
+p95 request latency: 564.05 ms
+
+This configuration exceeded the baseline ingestion target of:
+
+```text
+15,000 logs/second
+````
+
+# Aggregation Benchmark
+
+Aggregation was tested at **1 request per second for 60 seconds while ingestion was active**.
+
+```text
+Successful requests: 60
+Failed requests: 0
+Average latency: 465.60 ms
+p50 latency: 479.14 ms
+p95 latency: 727.96 ms
+p99 latency: 1040.26 ms
+```
+
+The aggregation p95 remained below the required **1 second** while the
+system was simultaneously ingesting logs.
+
+The p99 result shows occasional tail-latency spikes, which should be considered when evaluating behavior under heavier concurrent workloads.
+
+> Note: final simultaneous ingestion + aggregation benchmarking is still being completed. The standalone aggregation result above should not be interpreted as the final concurrent-load result.
+
+---
+
+# Resource Usage
+
+The application and PostgreSQL containers were monitored using:
+
+```bash
+docker stats logs-app logs-postgres
+
+docker stats
+```
+
+The application was observed approaching its configured CPU limit during heavy ingestion, while PostgreSQL generally used substantially less CPU.
+
+Memory remained well below the configured limits during the observed tests.
+
+Final peak resource measurements from the simultaneous ingestion and aggregation benchmark will be recorded here.
+
+---
+
+# Bottlenecks Discovered
+
+Load testing identified several important bottlenecks.
+
+## 1. Application CPU
+
+During high-throughput ingestion, the application container approached its `0.5 CPU` limit.
+
+PostgreSQL CPU usage remained significantly lower.
+
+This indicated that part of the ingestion bottleneck was in the Node.js application rather than PostgreSQL itself.
+
+---
+
+## 2. ORM Bulk Insert Overhead
+
+The original Drizzle bulk insertion path introduced measurable application-side overhead.
+
+Replacing the ingestion hot path with direct postgres.js bulk insertion significantly improved throughput.
+
+---
+
+## 3. Excessive Concurrency
+
+Higher concurrency improved throughput during short tests but did not always improve sustained throughput.
+
+For example:
+
+```text
+500k logs
+concurrency 4 → 15,112 logs/s
+concurrency 8 → 13,693 logs/s
+```
+
+Concurrency 8 also substantially increased request latency.
+
+This demonstrated that more concurrency does not necessarily mean more throughput when CPU resources are constrained.
+
+---
+
+## 4. Batch Size
+
+Batch size had a significant effect on throughput.
+
+A batch size of `1500` provided better sustained performance than `1000` in the 1,000,000-log benchmark.
+
+Very large batches can increase individual request latency, so batch size was selected based on measured throughput rather than assumptions.
+
+---
+
+## 5. Index Cost
+
+Indexes improve query performance but increase write cost because PostgreSQL must update each relevant index for every inserted record.
+
+The schema therefore uses a limited set of indexes aligned with the main query patterns rather than indexing every possible field.
+
+---
+
+# Optimizations Applied
+
+The following optimizations were applied based on measured results:
+
+- Bulk insertion instead of one insert per log
+- Direct postgres.js insertion on the ingestion hot path
+- Batch-size tuning
+- Concurrency tuning
+- Limited database indexes
+- Timestamp index for time-range queries
+- Service and level indexes for common filters
+- Cursor pagination instead of offset pagination
+- PostgreSQL JSONB for flexible attributes
+- Batched retention cleanup
+- Performance testing using realistic large datasets
+
+The most important optimization was replacing the ORM-based ingestion hot path with a lower-level postgres.js bulk insert.
+
+---
+
+# Performance Summary
+
+Final simultaneous ingestion and aggregation benchmark:
+
+```text
+Stored records tested:       ~1,000,000
+
+Ingestion:
+Batch size:                  1500
+Concurrency:                 4
+Throughput:                  18,905 logs/sec
+Average request latency:     310.96 ms
+p95 request latency:         531.27 ms
+Failed requests:             0
+
+Aggregation:
+Query rate:                  1 request/sec
+Successful requests:         60
+Failed requests:             0
+Average latency:             465.60 ms
+p50 latency:                 479.14 ms
+p95 latency:                 727.96 ms
+p99 latency:                 1040.26 ms
+
+Observed CPU:
+Application:                 ~35%
+PostgreSQL:                  ~91%
+
+Newly ingested data:
+Queryability time:           0.059 seconds
+```
+
+The service sustained **18,905 logs/second**, exceeding the required
+**15,000 logs/second** baseline, with zero failed ingestion requests.
+
+At the same time, aggregation was executed at **1 request per second** and
+maintained a p95 latency of **727.96 ms**, below the required **1 second**.
+
+Newly ingested data was queryable in approximately **59 ms**, well below
+the required **20-second** limit.
+
+# Remaining Performance Verification
+
+Before final submission, the following measurements still need to be verified:
+
+- simultaneous ingestion and aggregation
+- one aggregation request per second while ingestion is active
+- ingestion throughput of at least 15,000 logs/second during concurrent load
+- aggregation p95 below 1 second during concurrent ingestion
+- zero dropped requests during sustained concurrent ingestion
+- final application and PostgreSQL CPU usage
+- final application and PostgreSQL memory usage
+- newly ingested data becoming queryable within 20 seconds
+
+The final concurrent benchmark results will be added to the performance
+summary after testing.
+
+---
+
+# Known Limitations
+
+- Attributes are intentionally limited to flat key/value objects.
+- Higher concurrency can increase request and tail latency under the constrained CPU environment.
+- Aggregation p99 latency may contain occasional spikes even when p95 remains below the required target.
+
+---
+
+# Final Verification
+
+Before submission, the project should pass:
+
+```bash
+npm run build
+npm test
+```
+
+Docker startup should also work from a clean environment:
+
+```bash
+docker compose up --build
+```
+
+Health can be verified using:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Expected response:
+
+```text
+OK
+```
+
+---
+
+# Status
+
+Core functionality and mandatory performance testing are complete.
+
+Implemented:
+
+- ingestion and validation
+- querying and filtering
+- cursor pagination
+- aggregation
+- retention
+- PostgreSQL persistence and migrations
+- Docker and Docker Compose
+- CI
+- automated testing
+- load and performance testing
+
+---
+
+## Queryability of Newly Ingested Data
+
+A uniquely identifiable log was inserted through `POST /logs` and queried immediately through `GET /logs`.
+
+Measured result:
+
+```text
+Accepted logs: 1
+Query time after insertion: 0.059 seconds
+```
+
+The newly ingested record was queryable in approximately **59 ms**, well below the required **20-second** limit.
