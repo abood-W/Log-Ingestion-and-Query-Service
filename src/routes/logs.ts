@@ -6,7 +6,7 @@ import type { ValidLogInput, RejectedLog } from "../types/logs.js";
 import { desc, eq, and, gte, lt, or, SQL } from "drizzle-orm";
 import { buildSharedLogFilters } from "../query/log-filters.js";
 import { parseTimeRange } from "../query/time-range.js";
-import { bulkInsertLogs } from "../db/bulk-insert.js";
+import { enqueueLogs } from "../db/bulk-insert.js";
 const router = Router();
 
 router.post("/logs", async (req, res) => {
@@ -67,7 +67,7 @@ router.post("/logs", async (req, res) => {
 
   const insertStart = performance.now();
 
-  await bulkInsertLogs(acceptedLogs);
+  await enqueueLogs(acceptedLogs);
 
   const insertEnd = performance.now();
 

@@ -12,6 +12,7 @@ if (existsSync(".env")) {
 const { app } = await import("../src/app.js");
 const { db, client } = await import("../src/db/index.js");
 const { logs } = await import("../src/db/schema.js");
+const { flushNow } = await import("../src/db/bulk-insert.js");
 
 // Give every test an empty logs table.
 beforeEach(async () => {
@@ -47,7 +48,7 @@ test("POST /logs accepts valid log entries", async () => {
         },
       ],
     });
-
+  await flushNow();
   assert.equal(response.status, 200);
   assert.equal(response.body.accepted, 2);
   assert.deepEqual(response.body.rejected, []);
@@ -75,7 +76,7 @@ test("POST /logs accepts valid entries and rejects invalid entries", async () =>
         },
       ],
     });
-
+  await flushNow();
   assert.equal(response.status, 200);
   assert.equal(response.body.accepted, 1);
   assert.equal(response.body.rejected.length, 1);
@@ -107,7 +108,7 @@ test("POST /logs returns 400 when all entries are rejected", async () => {
         },
       ],
     });
-
+  await flushNow();
   assert.equal(response.status, 400);
   assert.equal(response.body.accepted, 0);
   assert.equal(response.body.rejected.length, 2);
@@ -152,7 +153,7 @@ test("GET /logs filters by service, level, message, and attributes", async () =>
         },
       ],
     });
-
+  await flushNow();
   assert.equal(insertResponse.status, 200);
 
   const response = await request(app).get("/logs").query({
@@ -161,7 +162,7 @@ test("GET /logs filters by service, level, message, and attributes", async () =>
     q: "PAYMENT",
     "attr.user_id": "42",
   });
-
+  await flushNow();
   assert.equal(response.status, 200);
   assert.equal(response.body.logs.length, 1);
   assert.equal(response.body.logs[0].service, "checkout");
@@ -195,12 +196,12 @@ test("GET /logs applies inclusive since and exclusive until filters", async () =
         },
       ],
     });
-
+  await flushNow();
   const response = await request(app).get("/logs").query({
     since: "2026-07-20T14:00:00.000Z",
     until: "2026-07-20T15:00:00.000Z",
   });
-
+  await flushNow();
   assert.equal(response.status, 200);
   assert.equal(response.body.logs.length, 2);
 
@@ -240,7 +241,7 @@ test("GET /logs supports cursor pagination", async () => {
         },
       ],
     });
-
+  await flushNow();
   const firstPage = await request(app).get("/logs").query({ limit: 1 });
 
   assert.equal(firstPage.status, 200);
@@ -265,7 +266,7 @@ test("GET /logs rejects an invalid cursor", async () => {
   const response = await request(app).get("/logs").query({
     cursor: "not-a-valid-cursor",
   });
-
+  await flushNow();
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "invalid cursor");
 });
@@ -274,7 +275,7 @@ test("GET /logs rejects an invalid level", async () => {
   const response = await request(app).get("/logs").query({
     level: "critical",
   });
-
+  await flushNow();
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "invalid level");
 });
@@ -283,7 +284,7 @@ test("GET /logs rejects a non-numeric limit", async () => {
   const response = await request(app).get("/logs").query({
     limit: "abc",
   });
-
+  await flushNow();
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "limit must be an integer");
 });
@@ -292,7 +293,7 @@ test("GET /logs rejects a limit below 1", async () => {
   const response = await request(app).get("/logs").query({
     limit: "0",
   });
-
+  await flushNow();
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "limit must be between 1 and 1000");
 });
@@ -301,7 +302,7 @@ test("GET /logs rejects a limit above 1000", async () => {
   const response = await request(app).get("/logs").query({
     limit: "1001",
   });
-
+  await flushNow();
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "limit must be between 1 and 1000");
 });

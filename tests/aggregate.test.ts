@@ -9,8 +9,9 @@ if (existsSync(".env")) {
 const { app } = await import("../src/app.js");
 const { db, client } = await import("../src/db/index.js");
 const { logs } = await import("../src/db/schema.js");
-
+const { flushNow } = await import("../src/db/bulk-insert.js");
 beforeEach(async () => {
+  await flushNow();
   await db.delete(logs);
 });
 
@@ -42,7 +43,7 @@ test("GET /logs/aggregate returns counts grouped by time bucket", async () => {
         },
       ],
     });
-
+  await flushNow();
   assert.equal(insertResponse.status, 200);
 
   const response = await request(app).get("/logs/aggregate").query({
@@ -93,7 +94,7 @@ test("GET /logs/aggregate groups results by service", async () => {
         },
       ],
     });
-
+  await flushNow();
   const response = await request(app).get("/logs/aggregate").query({
     since: "2026-08-04T14:00:00.000Z",
     until: "2026-08-04T15:00:00.000Z",
@@ -143,7 +144,7 @@ test("GET /logs/aggregate groups results by level", async () => {
         },
       ],
     });
-
+  await flushNow();
   const response = await request(app).get("/logs/aggregate").query({
     since: "2026-08-04T14:00:00.000Z",
     until: "2026-08-04T15:00:00.000Z",
@@ -210,7 +211,7 @@ test("GET /logs/aggregate applies service, level, q, and attribute filters", asy
         },
       ],
     });
-
+  await flushNow();
   const response = await request(app).get("/logs/aggregate").query({
     since: "2026-08-04T14:00:00.000Z",
     until: "2026-08-04T15:00:00.000Z",
