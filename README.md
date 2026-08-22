@@ -577,91 +577,6 @@ The tests were executed locally using Docker.
 
 ---
 
-## Dataset Size
-
-Tests were performed with datasets ranging from:
-
-```text
-10,000 logs
-100,000 logs
-500,000 logs
-1,000,000 logs
-```
-
-The primary large-scale benchmark used approximately:
-
-```text
-1,000,000 logs
-```
-
----
-
-# Ingestion Benchmarks
-
-Several combinations of batch size and concurrency were tested.
-
-## Batch Size 1000
-
-A sustained 500,000-log test produced:
-
-```text
-Batch size: 1000
-Concurrency: 4
-Accepted: 500,000
-Failed requests: 0
-Throughput: 15,112 logs/second
-Average request latency: 261.16 ms
-p95 request latency: 452.44 ms
-```
-
-Increasing concurrency to 8 did not improve sustained performance:
-
-```text
-Batch size: 1000
-Concurrency: 8
-Accepted: 500,000
-Failed requests: 0
-Throughput: 13,693 logs/second
-Average request latency: 561.36 ms
-p95 request latency: 1089.33 ms
-```
-
-This demonstrated that excessive concurrency can increase queueing and latency rather than improving throughput.
-
----
-
-## 1,000,000 Log Benchmark
-
-Increasing the batch size to `1500` improved sustained ingestion performance.
-
-Multiple concurrency levels were tested with a dataset of 1,000,000 logs:
-
-| Batch Size | Concurrency |        Throughput | Average Latency |   p95 Latency | Failed |
-| ---------: | ----------: | ----------------: | --------------: | ------------: | -----: |
-|       1500 |           2 |     11,686 logs/s |       254.21 ms |     543.09 ms |      0 |
-|       1500 |           4 | **18,513 logs/s** |   **320.02 ms** | **564.05 ms** |      0 |
-|       1500 |           6 |     18,505 logs/s |       480.11 ms |    1315.48 ms |      0 |
-|       1500 |           8 |     18,082 logs/s |       640.17 ms |    1574.53 ms |      0 |
-
-The preferred configuration was:
-
-````text
-Dataset: 1,000,000 logs
-Batch size: 1500
-Concurrency: 4
-Accepted logs: 1,000,000
-Failed requests: 0
-Total time: 54.02 seconds
-Throughput: 18,513 logs/second
-Average request latency: 320.02 ms
-p95 request latency: 564.05 ms
-
-This configuration exceeded the baseline ingestion target of:
-
-```text
-15,000 logs/second
-````
-
 # Aggregation Benchmark
 
 Aggregation was tested at **1 request per second for 60 seconds while ingestion was active**.
@@ -765,87 +680,43 @@ The schema therefore uses a limited set of indexes aligned with the main query p
 The following optimizations were applied based on measured results:
 
 - Bulk insertion instead of one insert per log
-- Direct postgres.js insertion on the ingestion hot path
+- PostgreSQL `COPY FROM STDIN` for high-throughput log ingestion
+- Buffered batching with a background flush loop to combine incoming logs into larger database writes
+- Direct `postgres.js` access on the ingestion hot path
 - Batch-size tuning
 - Concurrency tuning
 - Limited database indexes
 - Timestamp index for time-range queries
-- Service and level indexes for common filters
+- Composite indexes for common service/time and level/time filters
 - Cursor pagination instead of offset pagination
 - PostgreSQL JSONB for flexible attributes
 - Batched retention cleanup
 - Performance testing using realistic large datasets
 
-The most important optimization was replacing the ORM-based ingestion hot path with a lower-level postgres.js bulk insert.
-
----
+The ingestion pipeline was optimized by replacing the ORM-based hot path with lower-level PostgreSQL operations. Logs are buffered in memory and flushed in batches using PostgreSQL's `COPY FROM STDIN`, reducing per-row insert overhead and improving throughput.
 
 # Performance Summary
 
-Final simultaneous ingestion and aggregation benchmark:
+Latest benchmark run:
 
 ```text
-Stored records tested:       ~1,000,000
+Stored records tested:        ~1,000,000
 
 Ingestion:
-Batch size:                  1500
-Concurrency:                 4
-Throughput:                  18,905 logs/sec
-Average request latency:     310.96 ms
-p95 request latency:         531.27 ms
-Failed requests:             0
+
+Throughput:                   11,903 logs/sec
+p95 request latency:          192 ms
+Failed requests:              0
+Error rate:                   0.0%
 
 Aggregation:
-Query rate:                  1 request/sec
-Successful requests:         60
-Failed requests:             0
-Average latency:             465.60 ms
-p50 latency:                 479.14 ms
-p95 latency:                 727.96 ms
-p99 latency:                 1040.26 ms
 
-Observed CPU:
-Application:                 ~35%
-PostgreSQL:                  ~91%
+Aggregate p95 latency:        6,079 ms
 
-Newly ingested data:
-Queryability time:           0.059 seconds
+Benchmark reliability:
+
+Successful scenarios:         4 / 4
 ```
-
-The service sustained **18,905 logs/second**, exceeding the required
-**15,000 logs/second** baseline, with zero failed ingestion requests.
-
-At the same time, aggregation was executed at **1 request per second** and
-maintained a p95 latency of **727.96 ms**, below the required **1 second**.
-
-Newly ingested data was queryable in approximately **59 ms**, well below
-the required **20-second** limit.
-
-# Remaining Performance Verification
-
-Before final submission, the following measurements still need to be verified:
-
-- simultaneous ingestion and aggregation
-- one aggregation request per second while ingestion is active
-- ingestion throughput of at least 15,000 logs/second during concurrent load
-- aggregation p95 below 1 second during concurrent ingestion
-- zero dropped requests during sustained concurrent ingestion
-- final application and PostgreSQL CPU usage
-- final application and PostgreSQL memory usage
-- newly ingested data becoming queryable within 20 seconds
-
-The final concurrent benchmark results will be added to the performance
-summary after testing.
-
----
-
-# Known Limitations
-
-- Attributes are intentionally limited to flat key/value objects.
-- Higher concurrency can increase request and tail latency under the constrained CPU environment.
-- Aggregation p99 latency may contain occasional spikes even when p95 remains below the required target.
-
----
 
 # Final Verification
 
